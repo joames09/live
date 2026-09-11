@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>5-Person Video Chat Room</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #1a1a1a;
+            color: white;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 { margin-bottom: 10px; }
+        #controls {
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #555; cursor: not-allowed; }
+        
+        /* Grid system designed for up to 5-6 people */
+        #video-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            width: 100%;
+            max-width: 1200px;
+            height: 70vh;
+        }
+        .video-container {
+            background-color: #2a2a2a;
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+            aspect-ratio: 16/9;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .video-player {
+            width: 100%;
+            height: 100%;
+        }
+        .user-label {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.6);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+            z-index: 10;
+        }
+    </style>
+    <!-- Include the free Agora Web SDK -->
+    <script src="https://agora.io"></script>
+</head>
+<body>
+
+    <h1>Group Video Chat</h1>
+    <div id="controls">
+        <button id="join-btn">Join Video Room</button>
+        <button id="leave-btn" style="background-color: #dc3545;" disabled>Leave</button>
+    </div>
+
+    <div id="video-grid"></div>
+
+    <script>
+        // --- CONFIGURATION ---
+        const APP_ID = "2989c59fa1a94a7d8c5b5057096d1078"; // Put your Agora App ID here
+        const CHANNEL = "main-room"; // Everyone using this same channel name will see each other
+        const TOKEN = null; // Set to null for Testing Mode
+
+        const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+        let localTracks = [];
+        let remoteUsers = {};
+
+        const joinBtn = document.getElementById('join-btn');
+        const leaveBtn = document.getElementById('leave-btn');
+        const videoGrid = document.getElementById('video-grid');
+
+        // Join the room
+        async function joinRoom() {
+            joinBtn.disabled = true;
+            
+            // 1. Join the Agora channel
+            const uid = await client.join(APP_ID, CHANNEL, TOKEN, null);
+
+            // 2. Create local microphone and camera video tracks
+            localTracks = await AgoraRTC.createMicrophoneAndCameraTracks();
+
+            // 3. Create a box on screen for your own video
+            const localPlayer = document.createElement('div');
+            localPlayer.id = `user-${uid}`;
+            localPlayer.className = 'video-container';
+            localPlayer.innerHTML = `<div class="user-label">You</div><div id="player-${uid}" class="video-player"></div>`;
+            videoGrid.appendChild(localPlayer);
+
+            // 4. Play your camera preview inside that box
+            localTracks[1].play(`player-${uid}`);
+
+            // 5. Send your camera/mic feeds so other users can see/hear you
+            await client.publish(localTracks);
+
+            leaveBtn.disabled = false;
+        }
+
+        // Handle when a remote user joins and streams video
+        async function handleUserPublished(user, mediaType) {
+            const id = user.uid;
+            remoteUsers[id] = user;
+            await client.subscribe(user, mediaType);
+
+            if (mediaType === 'video') {
+                // If they don't have a box on your screen yet, create one
+                let remotePlayer = document.getElementById(`user-${id}`);
+                if (!remotePlayer) {
+                    remotePlayer = document.createElement('div');
+                    remotePlayer.id = `user-${id}`;
+                    remotePlayer.className = 'video-container';
+                    remotePlayer.innerHTML = `<div class="user-label">User ${id}</div><div id="player-${id}" class="video-player"></div>`;
+                    videoGrid.appendChild(remotePlayer);
+                }
+                user.videoTrack.play(`player-${id}`);
+            }
+
+            if (mediaType === 'audio') {
+                user.audioTrack.play();
+            }
+        }
+
+        // Clean up when someone leaves
+        function handleUserUnpublished(user) {
+            const id = user.uid;
+            delete remoteUsers[id];
+            const playerTrack = document.getElementById(`user-${id}`);
+            if (playerTrack) playerTrack.remove();
+        }
+
+        // Leave the room completely
+        async function leaveRoom() {
+            for (let track of localTracks) {
+                track.stop();
+                track.close();
+            }
+            await client.leave();
+            videoGrid.innerHTML = '';
+            joinBtn.disabled = false;
+            leaveBtn.disabled = true;
+        }
+
+        // Listen for other people joining or leaving
+        client.on("user-published", handleUserPublished);
+        client.on("user-unpublished", handleUserUnpublished);
+
+        // Link buttons to functions
+        joinBtn.addEventListener('click', joinRoom);
+        leaveBtn.addEventListener('click', leaveRoom);
+    </script>
+</body>
+</html>
