@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Connect Prank · Fast</title>
+<title>Connect Prank · Sound</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -130,7 +130,6 @@
     width: 100%;
     display: flex;
     flex-direction: column;
-    /* ⚡ SPEED CONTROL: smaller number = faster scroll */
     animation: scrollUp 1.2s linear infinite;
     will-change: transform;
   }
@@ -232,7 +231,6 @@
   .log-ticker span {
     display: inline-block;
     padding-left: 100%;
-    /* ⚡ SPEED CONTROL: smaller number = faster ticker */
     animation: ticker 20s linear infinite;
   }
   @keyframes ticker {
@@ -369,6 +367,12 @@
     </div>
   </div>
 
+  <!-- 🔇 HIDDEN AUDIO ELEMENT -->
+  <!-- Replace the src with your own sound file URL, OR keep the generated tone below -->
+  <audio id="prankSound" loop preload="auto">
+    <source src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=" type="audio/wav">
+  </audio>
+
 <script>
 (function () {
   // ============ CONFIG ============
@@ -385,6 +389,7 @@
   var progressLabel  = document.getElementById('progressLabel');
   var logTicker      = document.getElementById('logTicker');
   var prankOverlay   = document.getElementById('prankOverlay');
+  var prankSound     = document.getElementById('prankSound');
 
   // ============ LANGUAGES ============
   var languages = [
@@ -415,7 +420,6 @@
     { name: 'Erlang',     cls: 'accent-py',  code: 'loop() -> io:format("UP").' }
   ];
 
-  // Build lines (3 copies for smoother/faster infinite loop)
   var html = '';
   for (var i = 0; i < languages.length; i++) {
     var l = languages[i];
@@ -495,14 +499,14 @@
   var progressTimer = null;
   var statusTimer = null;
   var prankTimer = null;
+  var soundTimer = null;
   var prankActive = false;
 
-  // ============ PROGRESS SIMULATION (faster) ============
+  // ============ PROGRESS SIMULATION ============
   function startProgressSimulation() {
     statusText.textContent = 'initializing...';
     var startTime = Date.now();
 
-    // ⚡ updates every 120ms instead of 400ms
     progressTimer = setInterval(function () {
       var elapsed = Date.now() - startTime;
       var ratio = Math.min(elapsed / PRANK_DELAY_MS, 1);
@@ -514,7 +518,6 @@
       } else if (Math.random() < 0.05) {
         progress = Math.max(0, progress - Math.random() * 3);
       } else {
-        // ⚡ faster catch-up (0.5 instead of 0.35)
         progress += (target - progress) * 0.5;
       }
 
@@ -525,18 +528,108 @@
       progressFill.style.width = pct + '%';
       progressPct.textContent = pct + '%';
 
-      // ⚡ label changes more often
       if (Math.random() < 0.25) {
         progressLabel.textContent = progressLabels[Math.floor(Math.random() * progressLabels.length)];
       }
     }, 120);
 
-    // ⚡ status changes every 1s instead of 2s
     var statusIdx = 0;
     statusTimer = setInterval(function () {
       statusIdx = (statusIdx + 1) % statusMessages.length;
       statusText.textContent = statusMessages[statusIdx];
     }, 1000);
+  }
+
+  // ============ SOUND CONTROL ============
+  // We use the Web Audio API to generate a fake "connection sound"
+  // (a low hum + beeps) that plays for exactly 30 seconds.
+  // This avoids needing an external sound file.
+
+  var audioCtx = null;
+  var soundNodes = [];
+
+  function startSound() {
+    try {
+      // create audio context (needed after user gesture)
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+
+      var now = audioCtx.currentTime;
+      var duration = 30; // seconds — matches PRANK_DELAY_MS
+
+      // ---- 1. Low background hum (like a machine running) ----
+      var hum = audioCtx.createOscillator();
+      var humGain = audioCtx.createGain();
+      hum.type = 'sawtooth';
+      hum.frequency.value = 60; // low hum
+      humGain.gain.setValueAtTime(0, now);
+      humGain.gain.linearRampToValueAtTime(0.04, now + 1); // fade in
+      humGain.gain.setValueAtTime(0.04, now + duration - 1);
+      humGain.gain.linearRampToValueAtTime(0, now + duration); // fade out
+      hum.connect(humGain);
+      humGain.connect(audioCtx.destination);
+      hum.start(now);
+      hum.stop(now + duration);
+
+      soundNodes.push(hum, humGain);
+
+      // ---- 2. Repeating beeps (like data transmitting) ----
+      // schedule a beep every 0.5s for 30s = 60 beeps
+      for (var i = 0; i < duration * 2; i++) {
+        var beepTime = now + i * 0.5;
+        var beep = audioCtx.createOscillator();
+        var beepGain = audioCtx.createGain();
+        beep.type = 'sine';
+        // alternate frequencies for a "computery" feel
+        beep.frequency.value = (i % 2 === 0) ? 880 : 1320;
+        beepGain.gain.setValueAtTime(0, beepTime);
+        beepGain.gain.linearRampToValueAtTime(0.03, beepTime + 0.02);
+        beepGain.gain.linearRampToValueAtTime(0, beepTime + 0.1);
+        beep.connect(beepGain);
+        beepGain.connect(audioCtx.destination);
+        beep.start(beepTime);
+        beep.stop(beepTime + 0.12);
+        soundNodes.push(beep, beepGain);
+      }
+
+      // ---- 3. Rising sweep near the end (tension build) ----
+      var sweep = audioCtx.createOscillator();
+      var sweepGain = audioCtx.createGain();
+      sweep.type = 'triangle';
+      sweep.frequency.setValueAtTime(200, now + duration - 3);
+      sweep.frequency.exponentialRampToValueAtTime(2000, now + duration - 0.1);
+      sweepGain.gain.setValueAtTime(0, now + duration - 3);
+      sweepGain.gain.linearRampToValueAtTime(0.06, now + duration - 1);
+      sweepGain.gain.linearRampToValueAtTime(0, now + duration - 0.05);
+      sweep.connect(sweepGain);
+      sweepGain.connect(audioCtx.destination);
+      sweep.start(now + duration - 3);
+      sweep.stop(now + duration);
+      soundNodes.push(sweep, sweepGain);
+
+    } catch (e) {
+      console.log('Audio error:', e);
+    }
+  }
+
+  function stopSound() {
+    try {
+      // stop all scheduled nodes
+      for (var i = 0; i < soundNodes.length; i++) {
+        try { soundNodes[i].stop(); } catch (e) {}
+      }
+      soundNodes = [];
+      if (audioCtx) {
+        audioCtx.close();
+        audioCtx = null;
+      }
+    } catch (e) {
+      console.log('Stop sound error:', e);
+    }
   }
 
   // ============ RUN PRANK ============
@@ -547,11 +640,17 @@
     startScreen.classList.add('hide');
     terminal.classList.add('show');
 
+    // 🔊 START THE SOUND (runs for 30s)
+    startSound();
+
     startProgressSimulation();
 
     prankTimer = setTimeout(function () {
       if (progressTimer) clearInterval(progressTimer);
       if (statusTimer) clearInterval(statusTimer);
+
+      // 🔊 STOP THE SOUND
+      stopSound();
 
       statusText.textContent = 'just kidding';
       prankOverlay.classList.add('show');
@@ -563,6 +662,10 @@
     if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
     if (statusTimer)   { clearInterval(statusTimer);   statusTimer = null; }
     if (prankTimer)    { clearTimeout(prankTimer);     prankTimer = null; }
+    if (soundTimer)    { clearTimeout(soundTimer);     soundTimer = null; }
+
+    // make sure sound is off
+    stopSound();
 
     prankOverlay.classList.remove('show');
     terminal.classList.remove('show');
