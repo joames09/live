@@ -1,172 +1,593 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>5-Person Video Chat Room</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #1a1a1a;
-            color: white;
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        h1 { margin-bottom: 10px; }
-        #controls {
-            margin-bottom: 20px;
-        }
-        button {
-            padding: 10px 20px;
-            font-size: 16px;
-            background-color: #007bff;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        button:hover { background-color: #0056b3; }
-        button:disabled { background-color: #555; cursor: not-allowed; }
-        
-        /* Grid system designed for up to 5-6 people */
-        #video-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 15px;
-            width: 100%;
-            max-width: 1200px;
-            height: 70vh;
-        }
-        .video-container {
-            background-color: #2a2a2a;
-            border-radius: 8px;
-            overflow: hidden;
-            position: relative;
-            aspect-ratio: 16/9;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-        }
-        .video-player {
-            width: 100%;
-            height: 100%;
-        }
-        .user-label {
-            position: absolute;
-            bottom: 10px;
-            left: 10px;
-            background: rgba(0,0,0,0.6);
-            padding: 5px 10px;
-            border-radius: 4px;
-            font-size: 14px;
-            z-index: 10;
-        }
-    </style>
-    <!-- Include the free Agora Web SDK -->
-    <script src="https://agora.io"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Connect Prank · Fast</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0b0f1a;
+    font-family: 'Courier New', monospace;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  /* START SCREEN */
+  .start-screen {
+    text-align: center;
+    z-index: 50;
+    transition: opacity 0.6s ease;
+  }
+  .start-screen.hide { opacity: 0; pointer-events: none; }
+
+  .connect-btn {
+    background: #0d1117;
+    border: 2px solid #20e070;
+    color: #20e070;
+    font-family: 'Courier New', monospace;
+    font-size: 1.6rem;
+    font-weight: 700;
+    padding: 24px 60px;
+    border-radius: 60px;
+    cursor: pointer;
+    letter-spacing: 3px;
+    box-shadow: 0 0 30px #20e07050;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+  }
+  .connect-btn:hover {
+    background: #20e070;
+    color: #0b0f1a;
+    box-shadow: 0 0 60px #20e070;
+    transform: scale(1.05);
+  }
+  .start-hint {
+    color: #3a5a7a;
+    margin-top: 20px;
+    font-size: 0.85rem;
+    letter-spacing: 2px;
+  }
+
+  /* TERMINAL */
+  .terminal {
+    position: fixed;
+    inset: 0;
+    background: #0d1117;
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.5s ease;
+    z-index: 10;
+  }
+  .terminal.show { opacity: 1; pointer-events: auto; }
+
+  .window-bar {
+    background: #161c26;
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 1px solid #2a3648;
+    flex-shrink: 0;
+  }
+  .dots { display: flex; gap: 8px; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; background: #2d3b4b; }
+  .dot.red { background: #ff5f56; }
+  .dot.yellow { background: #ffbd2e; }
+  .dot.green { background: #27c93f; }
+
+  .title {
+    color: #9aaec9;
+    font-size: 0.9rem;
+    letter-spacing: 1px;
+    margin-left: 10px;
+  }
+
+  .status-indicator {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8rem;
+    color: #6d8aae;
+    background: #1b2330;
+    padding: 5px 12px;
+    border-radius: 30px;
+    border: 1px solid #2e405b;
+    min-width: 260px;
+  }
+
+  .pulse-dot {
+    width: 10px; height: 10px;
+    background: #20e070;
+    border-radius: 50%;
+    animation: pulse 1.5s infinite;
+    box-shadow: 0 0 10px #20e070;
+    flex-shrink: 0;
+  }
+  @keyframes pulse {
+    0% { opacity: 0.6; transform: scale(0.9); }
+    50% { opacity: 1; transform: scale(1.2); }
+    100% { opacity: 0.6; transform: scale(0.9); }
+  }
+
+  /* CODE RAIN */
+  .code-rain {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    background: #0b0f1a;
+  }
+  .lines-container {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    /* ⚡ SPEED CONTROL: smaller number = faster scroll */
+    animation: scrollUp 1.2s linear infinite;
+    will-change: transform;
+  }
+  @keyframes scrollUp {
+    0% { transform: translateY(0); }
+    100% { transform: translateY(-50%); }
+  }
+
+  .code-line {
+    display: flex;
+    align-items: center;
+    padding: 6px 20px;
+    font-size: 1rem;
+    line-height: 1.6;
+    color: #b3e0ff;
+    white-space: nowrap;
+    border-left: 4px solid transparent;
+    letter-spacing: 0.3px;
+    text-shadow: 0 0 4px #1e90ff30;
+    opacity: 0.9;
+  }
+  .code-line:nth-child(odd) { background: #0f141e; }
+
+  .lang-tag {
+    display: inline-block;
+    font-weight: 600;
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 20px;
+    margin-right: 16px;
+    background: #1e2a3a;
+    color: #95b8e0;
+    border: 1px solid #314a66;
+    min-width: 90px;
+    text-align: center;
+  }
+  .code-text { color: #ccddee; }
+
+  .accent-js .lang-tag { background:#2a2a1e; color:#f0db4f; border-color:#f0db4f50; }
+  .accent-py .lang-tag { background:#1e2a2a; color:#4bcfb0; border-color:#4bcfb050; }
+  .accent-rs .lang-tag { background:#2a1e1a; color:#f57b5e; border-color:#f57b5e50; }
+  .accent-go .lang-tag { background:#1e2a2e; color:#5dc9e2; border-color:#5dc9e250; }
+  .accent-rb .lang-tag { background:#2a1a1e; color:#e06c75; border-color:#e06c7550; }
+  .accent-cpp .lang-tag { background:#1e1e2a; color:#b48ead; border-color:#b48ead50; }
+
+  /* PROGRESS BAR */
+  .progress-wrap {
+    background: #0f141e;
+    border-top: 1px solid #1e2a3a;
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-shrink: 0;
+  }
+  .progress-label {
+    color: #6d8aae;
+    font-size: 0.8rem;
+    letter-spacing: 2px;
+    min-width: 160px;
+  }
+  .progress-bar {
+    flex: 1;
+    height: 8px;
+    background: #1b2330;
+    border-radius: 20px;
+    overflow: hidden;
+    border: 1px solid #2a3648;
+  }
+  .progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #20e070, #1e90ff);
+    border-radius: 20px;
+    transition: width 0.15s linear;
+    box-shadow: 0 0 10px #20e07060;
+  }
+  .progress-pct {
+    color: #20e070;
+    font-size: 0.85rem;
+    font-weight: 700;
+    min-width: 55px;
+    text-align: right;
+    letter-spacing: 1px;
+  }
+
+  /* LOG TICKER */
+  .log-ticker {
+    background: #080b12;
+    border-top: 1px solid #1e2a3a;
+    color: #4a6a8a;
+    font-size: 0.8rem;
+    padding: 8px 20px;
+    white-space: nowrap;
+    overflow: hidden;
+    flex-shrink: 0;
+    letter-spacing: 0.5px;
+  }
+  .log-ticker span {
+    display: inline-block;
+    padding-left: 100%;
+    /* ⚡ SPEED CONTROL: smaller number = faster ticker */
+    animation: ticker 20s linear infinite;
+  }
+  @keyframes ticker {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-100%); }
+  }
+
+  /* PRANK OVERLAY */
+  .prank-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.94);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.5s ease;
+  }
+  .prank-overlay.show { opacity: 1; pointer-events: auto; cursor: pointer; }
+
+  .prank-content {
+    text-align: center;
+    max-width: 700px;
+    padding: 50px 40px;
+    border-radius: 30px;
+    background: #0d1117;
+    border: 2px solid #20e070;
+    box-shadow: 0 0 80px #20e07040;
+  }
+
+  .prank-emoji {
+    font-size: 5rem;
+    line-height: 1;
+    margin-bottom: 10px;
+    animation: wobble 0.6s infinite alternate;
+  }
+  @keyframes wobble {
+    from { transform: rotate(-8deg); }
+    to { transform: rotate(8deg); }
+  }
+
+  .prank-title {
+    font-size: 3rem;
+    font-weight: 800;
+    color: #20e070;
+    text-shadow: 0 0 20px #20e070;
+    letter-spacing: 5px;
+    margin-bottom: 20px;
+  }
+  .prank-message {
+    font-size: 1.4rem;
+    color: #b3e0ff;
+    margin-bottom: 20px;
+    line-height: 1.5;
+  }
+  .highlight {
+    display: inline-block;
+    background: #20e07020;
+    padding: 4px 14px;
+    border-radius: 30px;
+    color: #20e070;
+    font-weight: 600;
+    border: 1px solid #20e07060;
+    margin: 4px;
+  }
+  .prank-sub {
+    font-size: 1rem;
+    color: #5f7f9f;
+    margin-top: 20px;
+    letter-spacing: 2px;
+    border-top: 1px dashed #2a4a5a;
+    padding-top: 20px;
+    animation: blink 1.2s infinite alternate;
+  }
+  @keyframes blink {
+    from { opacity: 1; }
+    to { opacity: 0.3; }
+  }
+</style>
 </head>
 <body>
 
-    <h1>Group Video Chat</h1>
-    <div id="controls">
-        <button id="join-btn">Join Video Room</button>
-        <button id="leave-btn" style="background-color: #dc3545;" disabled>Leave</button>
+  <!-- START SCREEN -->
+  <div class="start-screen" id="startScreen">
+    <button class="connect-btn" id="connectBtn">▶ CONNECT</button>
+    <div class="start-hint">click to establish connection</div>
+  </div>
+
+  <!-- TERMINAL -->
+  <div class="terminal" id="terminal">
+    <div class="window-bar">
+      <div class="dots">
+        <div class="dot red"></div>
+        <div class="dot yellow"></div>
+        <div class="dot green"></div>
+      </div>
+      <div class="title">user@connect:~/flow$ ./programming_upward</div>
+      <div class="status-indicator">
+        <span class="pulse-dot"></span>
+        <span id="statusText">initializing...</span>
+      </div>
     </div>
 
-    <div id="video-grid"></div>
+    <div class="code-rain">
+      <div class="lines-container" id="linesContainer"></div>
+    </div>
 
-    <script>
-        // --- CONFIGURATION ---
-        const APP_ID = "2989c59fa1a94a7d8c5b5057096d1078"; // Put your Agora App ID here
-        const CHANNEL = "main-room"; // Everyone using this same channel name will see each other
-        const TOKEN = "007eJxTYODf3dt65vbN3O9yP2qraz7KKt3juGVh9WVnHsNLtqnqr5YrMBhZWlgmm1qmJRomWpokmqdYJJsmmRqYmhtYmqUYGphbLNywOKshkJFhseovRkYGCATxORlyEzPzdIvy83MZGAB34CLq"; // Set to null for Testing Mode
+    <div class="progress-wrap">
+      <div class="progress-label" id="progressLabel">COMPILING FLOW</div>
+      <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-pct" id="progressPct">0%</div>
+    </div>
 
-        const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
-        let localTracks = [];
-        let remoteUsers = {};
+    <div class="log-ticker">
+      <span id="logTicker"></span>
+    </div>
+  </div>
 
-        const joinBtn = document.getElementById('join-btn');
-        const leaveBtn = document.getElementById('leave-btn');
-        const videoGrid = document.getElementById('video-grid');
+  <!-- PRANK OVERLAY -->
+  <div class="prank-overlay" id="prankOverlay">
+    <div class="prank-content">
+      <div class="prank-emoji">😂</div>
+      <div class="prank-title">GOTCHA!</div>
+      <div class="prank-message">
+        You waited <span class="highlight">30 seconds</span> for nothing
+      </div>
+      <div class="prank-message" style="font-size:1.1rem; color:#8ab3d0;">
+        There was never a connection.<br>Just programming languages flying upward forever. 😎
+      </div>
+      <div class="prank-sub">click anywhere to escape</div>
+    </div>
+  </div>
 
-        // Join the room
-        async function joinRoom() {
-            joinBtn.disabled = true;
-            
-            // 1. Join the Agora channel
-            const uid = await client.join(APP_ID, CHANNEL, TOKEN, null);
+<script>
+(function () {
+  // ============ CONFIG ============
+  var PRANK_DELAY_MS = 30 * 1000; // 30 seconds
 
-            // 2. Create local microphone and camera video tracks
-            localTracks = await AgoraRTC.createMicrophoneAndCameraTracks();
+  // ============ DOM ============
+  var startScreen    = document.getElementById('startScreen');
+  var connectBtn     = document.getElementById('connectBtn');
+  var terminal       = document.getElementById('terminal');
+  var linesContainer = document.getElementById('linesContainer');
+  var statusText     = document.getElementById('statusText');
+  var progressFill   = document.getElementById('progressFill');
+  var progressPct    = document.getElementById('progressPct');
+  var progressLabel  = document.getElementById('progressLabel');
+  var logTicker      = document.getElementById('logTicker');
+  var prankOverlay   = document.getElementById('prankOverlay');
 
-            // 3. Create a box on screen for your own video
-            const localPlayer = document.createElement('div');
-            localPlayer.id = `user-${uid}`;
-            localPlayer.className = 'video-container';
-            localPlayer.innerHTML = `<div class="user-label">You</div><div id="player-${uid}" class="video-player"></div>`;
-            videoGrid.appendChild(localPlayer);
+  // ============ LANGUAGES ============
+  var languages = [
+    { name: 'JavaScript', cls: 'accent-js',  code: 'while(true) console.log("UP");' },
+    { name: 'Python',     cls: 'accent-py',  code: 'while True: print("UP")' },
+    { name: 'Rust',       cls: 'accent-rs',  code: 'loop { println!("UP"); }' },
+    { name: 'Go',         cls: 'accent-go',  code: 'for { fmt.Println("UP") }' },
+    { name: 'Ruby',       cls: 'accent-rb',  code: 'loop { puts "UP" }' },
+    { name: 'C++',        cls: 'accent-cpp', code: 'while(true) cout << "UP";' },
+    { name: 'TypeScript', cls: 'accent-js',  code: 'while (true) log("UP");' },
+    { name: 'Swift',      cls: 'accent-rs',  code: 'while true { print("UP") }' },
+    { name: 'Kotlin',     cls: 'accent-go',  code: 'while (true) println("UP")' },
+    { name: 'Haskell',    cls: 'accent-py',  code: 'main = forever $ putStrLn "UP"' },
+    { name: 'Elixir',     cls: 'accent-rb',  code: 'Stream.cycle(["UP"])' },
+    { name: 'Scala',      cls: 'accent-cpp', code: 'while(true) println("UP")' },
+    { name: 'Perl',       cls: 'accent-js',  code: 'while(1) { print "UP\\n"; }' },
+    { name: 'Lua',        cls: 'accent-py',  code: 'while true do print("UP") end' },
+    { name: 'R',          cls: 'accent-rs',  code: 'repeat { print("UP") }' },
+    { name: 'Dart',       cls: 'accent-go',  code: 'while (true) { print("UP"); }' },
+    { name: 'PHP',        cls: 'accent-rb',  code: 'while (true) { echo "UP"; }' },
+    { name: 'Julia',      cls: 'accent-cpp', code: 'while true; println("UP"); end' },
+    { name: 'Clojure',    cls: 'accent-js',  code: '(loop [] (println "UP") (recur))' },
+    { name: 'Zig',        cls: 'accent-py',  code: 'while (true) { print("UP"); }' },
+    { name: 'Nim',        cls: 'accent-rs',  code: 'while true: echo "UP"' },
+    { name: 'Crystal',    cls: 'accent-go',  code: 'loop { puts "UP" }' },
+    { name: 'OCaml',      cls: 'accent-cpp', code: 'while true do print_endline "UP" done' },
+    { name: 'F#',         cls: 'accent-js',  code: 'while true do printfn "UP"' },
+    { name: 'Erlang',     cls: 'accent-py',  code: 'loop() -> io:format("UP").' }
+  ];
 
-            // 4. Play your camera preview inside that box
-            localTracks[1].play(`player-${uid}`);
+  // Build lines (3 copies for smoother/faster infinite loop)
+  var html = '';
+  for (var i = 0; i < languages.length; i++) {
+    var l = languages[i];
+    html += '<div class="code-line ' + l.cls + '">' +
+              '<span class="lang-tag">' + l.name + '</span>' +
+              '<span class="code-text">' + l.code + '</span>' +
+            '</div>';
+  }
+  linesContainer.innerHTML = html + html + html;
 
-            // 5. Send your camera/mic feeds so other users can see/hear you
-            await client.publish(localTracks);
+  // ============ LOG MESSAGES ============
+  var logMessages = [
+    'initializing secure tunnel...',
+    'resolving handshake protocol...',
+    'loading language runtime...',
+    'compiling upward_flow.c ... OK',
+    'spawning worker threads [16/16] ... OK',
+    'allocating memory pool 4096MB ... OK',
+    'syncing with remote node 0x4F2A ...',
+    'verifying checksum a3f9b2c1 ... OK',
+    'establishing socket connection ...',
+    'negotiating TLS 1.3 cipher suite ...',
+    'injecting dependency graph ...',
+    'warmup phase 1/4 ...',
+    'warmup phase 2/4 ...',
+    'warmup phase 3/4 ...',
+    'warmup phase 4/4 ...',
+    'pre-flight checks passed',
+    'streaming code packets ...',
+    'buffer overflow avoided (again)',
+    'recompiling kernel modules ...',
+    'awaiting confirmation from peer ...',
+    'retrying handshake (attempt 2) ...',
+    'retrying handshake (attempt 3) ...',
+    'finalizing connection parameters ...',
+    'one moment please ...',
+    'almost there ...',
+    'just a little longer ...',
+    'hang tight ...',
+    'still working on it ...',
+    'any second now ...'
+  ];
 
-            leaveBtn.disabled = false;
-        }
+  logTicker.textContent = logMessages.join('   ·   ') + '   ·   ' + logMessages.join('   ·   ');
 
-        // Handle when a remote user joins and streams video
-        async function handleUserPublished(user, mediaType) {
-            const id = user.uid;
-            remoteUsers[id] = user;
-            await client.subscribe(user, mediaType);
+  // ============ STATUS MESSAGES ============
+  var statusMessages = [
+    'initializing...',
+    'handshaking...',
+    'negotiating...',
+    'authenticating...',
+    'loading modules...',
+    'spawning threads...',
+    'compiling...',
+    'linking...',
+    'optimizing...',
+    'syncing...',
+    'streaming...',
+    'waiting for peer...',
+    'finalizing...',
+    'almost there...'
+  ];
 
-            if (mediaType === 'video') {
-                // If they don't have a box on your screen yet, create one
-                let remotePlayer = document.getElementById(`user-${id}`);
-                if (!remotePlayer) {
-                    remotePlayer = document.createElement('div');
-                    remotePlayer.id = `user-${id}`;
-                    remotePlayer.className = 'video-container';
-                    remotePlayer.innerHTML = `<div class="user-label">User ${id}</div><div id="player-${id}" class="video-player"></div>`;
-                    videoGrid.appendChild(remotePlayer);
-                }
-                user.videoTrack.play(`player-${id}`);
-            }
+  var progressLabels = [
+    'COMPILING FLOW',
+    'LINKING MODULES',
+    'OPTIMIZING',
+    'SYNCING',
+    'STREAMING',
+    'BUFFERING',
+    'HANDSHAKING',
+    'FINALIZING'
+  ];
 
-            if (mediaType === 'audio') {
-                user.audioTrack.play();
-            }
-        }
+  // ============ STATE ============
+  var progress = 0;
+  var progressTimer = null;
+  var statusTimer = null;
+  var prankTimer = null;
+  var prankActive = false;
 
-        // Clean up when someone leaves
-        function handleUserUnpublished(user) {
-            const id = user.uid;
-            delete remoteUsers[id];
-            const playerTrack = document.getElementById(`user-${id}`);
-            if (playerTrack) playerTrack.remove();
-        }
+  // ============ PROGRESS SIMULATION (faster) ============
+  function startProgressSimulation() {
+    statusText.textContent = 'initializing...';
+    var startTime = Date.now();
 
-        // Leave the room completely
-        async function leaveRoom() {
-            for (let track of localTracks) {
-                track.stop();
-                track.close();
-            }
-            await client.leave();
-            videoGrid.innerHTML = '';
-            joinBtn.disabled = false;
-            leaveBtn.disabled = true;
-        }
+    // ⚡ updates every 120ms instead of 400ms
+    progressTimer = setInterval(function () {
+      var elapsed = Date.now() - startTime;
+      var ratio = Math.min(elapsed / PRANK_DELAY_MS, 1);
 
-        // Listen for other people joining or leaving
-        client.on("user-published", handleUserPublished);
-        client.on("user-unpublished", handleUserUnpublished);
+      var target = (1 - Math.pow(1 - ratio, 2.2)) * 98;
 
-        // Link buttons to functions
-        joinBtn.addEventListener('click', joinRoom);
-        leaveBtn.addEventListener('click', leaveRoom);
-    </script>
+      if (Math.random() < 0.08) {
+        // stall
+      } else if (Math.random() < 0.05) {
+        progress = Math.max(0, progress - Math.random() * 3);
+      } else {
+        // ⚡ faster catch-up (0.5 instead of 0.35)
+        progress += (target - progress) * 0.5;
+      }
+
+      if (progress > 99.4) progress = 99.4;
+      if (progress < 0) progress = 0;
+
+      var pct = progress.toFixed(1);
+      progressFill.style.width = pct + '%';
+      progressPct.textContent = pct + '%';
+
+      // ⚡ label changes more often
+      if (Math.random() < 0.25) {
+        progressLabel.textContent = progressLabels[Math.floor(Math.random() * progressLabels.length)];
+      }
+    }, 120);
+
+    // ⚡ status changes every 1s instead of 2s
+    var statusIdx = 0;
+    statusTimer = setInterval(function () {
+      statusIdx = (statusIdx + 1) % statusMessages.length;
+      statusText.textContent = statusMessages[statusIdx];
+    }, 1000);
+  }
+
+  // ============ RUN PRANK ============
+  function runPrank() {
+    if (prankActive) return;
+    prankActive = true;
+
+    startScreen.classList.add('hide');
+    terminal.classList.add('show');
+
+    startProgressSimulation();
+
+    prankTimer = setTimeout(function () {
+      if (progressTimer) clearInterval(progressTimer);
+      if (statusTimer) clearInterval(statusTimer);
+
+      statusText.textContent = 'just kidding';
+      prankOverlay.classList.add('show');
+    }, PRANK_DELAY_MS);
+  }
+
+  // ============ RESET ============
+  function resetPrank() {
+    if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
+    if (statusTimer)   { clearInterval(statusTimer);   statusTimer = null; }
+    if (prankTimer)    { clearTimeout(prankTimer);     prankTimer = null; }
+
+    prankOverlay.classList.remove('show');
+    terminal.classList.remove('show');
+    startScreen.classList.remove('hide');
+
+    progress = 0;
+    progressFill.style.width = '0%';
+    progressPct.textContent = '0%';
+    progressLabel.textContent = 'COMPILING FLOW';
+    statusText.textContent = 'initializing...';
+
+    setTimeout(function () { prankActive = false; }, 500);
+  }
+
+  // ============ EVENTS ============
+  connectBtn.addEventListener('click', runPrank);
+  prankOverlay.addEventListener('click', resetPrank);
+
+  connectBtn.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      runPrank();
+    }
+  });
+})();
+</script>
 </body>
 </html>
